@@ -218,3 +218,6 @@ mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_7.txt_sorted_ascending.
 mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_8.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
 mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_9.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
 mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_10.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+
+# delete all temporary files
+rm -rf !(README.txt|bash_scripts.txt|final_output|transpose.awk|snp_position.txt|fang_et_al_genotypes.txt)
