@@ -1,0 +1,218 @@
+# cut out the zmays or teosinte genotype info while keeping in the column names
+awk 'NR == 1 || ($3 == "ZMPBA" || $3 == "ZMPIL" || $3 == "ZMPJA") {print}' fang_et_al_genotypes.txt >> teosinte_genotypes.txt
+awk 'NR == 1 || ($3 == "ZMMIL" || $3 == "ZMMLR" || $3 == "ZMMMR") {print}' fang_et_al_genotypes.txt >> zmays_genotypes.txt
+
+# transpose the teosinte and zmays files
+awk -f transpose.awk zmays_genotypes.txt > transposed_zmays_genotypes.txt
+awk -f transpose.awk teosinte_genotypes.txt > transposed_teosinte_genotypes.txt
+
+# remove the first three columns of the genotypes files
+tail -n +4 transposed_zmays_genotypes.txt >> cleaned_zmays_genotypes.txt
+tail -n +4 transposed_teosinte_genotypes.txt >> cleaned_teosinte_genotypes.txt
+
+# sort the genotypes files
+sort -k1 cleaned_zmays_genotypes.txt >> sorted_cleaned_zmays_genotypes.txt
+sort -k1 cleaned_teosinte_genotypes.txt >> sorted_cleaned_teosinte_genotypes.txt
+
+# cut out snpID, chromosme, and position data from snp_position data
+cut -f1,3,4 snp_position.txt >> cleaned_snp_position.txt
+
+# sort the cleaned_snp_positions file
+sort -k1 cleaned_snp_position.txt >> sorted_cleaned_snp_position.txt
+
+# join the genotypes and snp_posiitons files
+join -t $'\t' -1 1 -2 1 sorted_cleaned_snp_position.txt sorted_cleaned_zmays_genotypes.txt > joined_zmays.txt
+join -t $'\t' -1 1 -2 1 sorted_cleaned_snp_position.txt sorted_cleaned_teosinte_genotypes.txt > joined_teosinte.txt
+
+# create header for final output file
+head -n 1 cleaned_snp_position.txt >> snp_positions_header.txt
+head -n 1 transposed_teosinte_genotypes.txt > teosinte_genotype_headers.txt
+awk 'NR==1 {sub("Sample_ID", "SNP_ID")} 1' teosinte_genotype_headers.txt > teosinte_genotype_headers_subbed.txt
+cut -f 2- teosinte_genotype_headers.txt > teosinte_headers.txt
+paste -d "\t" <(head -n 1 snp_positions_header.txt) <(head -n 1 teosinte_headers.txt) > combined_headers_teosinte.txt 
+
+head -n 1 transposed_zmays_genotypes.txt > zmays_genotype_headers.txt
+awk 'NR==1 {sub("Sample_ID", "SNP_ID")} 1' zmays_genotype_headers.txt > zmays_genotype_headers_subbed.txt
+cut -f 2- zmays_genotype_headers.txt > zmays_headers.txt
+paste -d "\t" <(head -n 1 snp_positions_header.txt) <(head -n 1 zmays_headers.txt) > combined_headers_zmays.txt 
+
+
+# add headers to the joined files
+awk 'NR==FNR{h=$0; next} FNR==1{print h} 1' combined_headers_teosinte.txt joined_teosinte.txt > teosinte_header_joined.txt
+awk 'NR==FNR{h=$0; next} FNR==1{print h} 1' combined_headers_zmays.txt joined_zmays.txt > zmays_header_joined.txt
+
+# split files by chromsome number
+
+# Extract unique values from column 2 for zmays
+unique_values=$(awk '{print $2}' zmays_header_joined.txt | sort | uniq)
+
+# Loop over each unique value
+for value in $unique_values; do
+    awk -v val="$value" '$2 == val { print > ("zmays_chrom_" $2 ".txt") }' zmays_header_joined.txt
+done
+
+# Extract unique values from column 2 for teosinte
+unique_values=$(awk '{print $2}' teosinte_header_joined.txt | sort | uniq)
+
+# Loop over each unique value
+for value in $unique_values; do
+    awk -v val="$value" '$2 == val { print > ("teosinte_chrom_" $2 ".txt") }' teosinte_header_joined.txt
+done
+
+# add headers to the split files
+# Iterate over input files
+for input_file in teosinte_chrom_*.txt; do
+    # Extract the suffix from the input file name
+    suffix="${input_file#*_}"
+
+    # Construct the output file name
+    output_file="teosinte_header_joined_$suffix.txt"
+
+    # Perform the operation and append to the output file
+    awk 'NR==FNR{h=$0; next} FNR==1{print h} 1' combined_headers_teosinte.txt "$input_file" > "$output_file"
+done
+
+# Iterate over input files
+for input_file in zmays_chrom_*.txt; do
+    # Extract the suffix from the input file name
+    suffix="${input_file#*_}"
+
+    # Construct the output file name
+    output_file="zmays_header_joined_$suffix.txt"
+
+    # Perform the operation and append to the output file
+    awk 'NR==FNR{h=$0; next} FNR==1{print h} 1' combined_headers_zmays.txt "$input_file" > "$output_file"
+done
+
+
+# Sort the files in ascending and descending order based on the third column
+# Iterate over input files for zmays
+for input_file in zmays_header_joined_chrom_*.txt; do
+    # Construct the output file name for ascending order by appending "_sorted_ascending" to the input file name
+    output_file_asc="${input_file%.txt}_sorted_ascending.txt"
+
+    # Construct the output file name for descending order by appending "_sorted_descending" to the input file name
+    output_file_desc="${input_file%.txt}_sorted_descending.txt"
+
+    # Use tail to skip the first row (column names), then sort the file based on the third column in ascending order,
+    # and save the sorted content to the output file for ascending order
+    tail -n +2 "$input_file" | sort -k3n > "$output_file_asc"
+
+    # Use tail to skip the first row (column names), then sort the file based on the third column in descending order,
+    # and save the sorted content to the output file for descending order
+    tail -n +2 "$input_file" | sort -k3nr > "$output_file_desc"
+done
+
+# Iterate over input files for teosinte
+for input_file in teosinte_header_joined_chrom_*.txt; do
+    # Construct the output file name for ascending order by appending "_sorted_ascending" to the input file name
+    output_file_asc="${input_file%.txt}_sorted_ascending.txt"
+
+    # Construct the output file name for descending order by appending "_sorted_descending" to the input file name
+    output_file_desc="${input_file%.txt}_sorted_descending.txt"
+
+    # Use tail to skip the first row (column names), then sort the file based on the third column in ascending order,
+    # and save the sorted content to the output file for ascending order
+    tail -n +2 "$input_file" | sort -k3n > "$output_file_asc"
+
+    # Use tail to skip the first row (column names), then sort the file based on the third column in descending order,
+    # and save the sorted content to the output file for descending order
+    tail -n +2 "$input_file" | sort -k3nr > "$output_file_desc"
+done
+
+##have to replace missing values with '?' in the ascending file and '-' in the descending file
+
+# replace '?'s with '-'
+for input_file in *descending.txt; do
+    output_file="${input_file}_subbed.txt"
+    awk -F'\t' '{ gsub(/\?/, "-",$0); print }' "$input_file" > "$output_file"
+done
+
+
+
+# add headers to the sorted files
+# Iterate over input files for teosinte
+for input_file in teosinte_header_joined_*.txt; do
+    # Extract the suffix from the input file name
+suffix="${input_file#*chrom_}"   # Remove everything up to and including "chrom_"
+
+
+    # Construct the output file name
+    output_file="teosinte_final_$suffix.txt"
+
+    # Perform the operation and append to the output file
+    awk 'NR==FNR{h=$0; next} FNR==1{print h} 1' combined_headers_teosinte.txt "$input_file" > "$output_file"
+done
+
+
+# Iterate over input files for zmays
+for input_file in zmays_header_joined_*.txt; do
+    # Extract the suffix from the input file name
+suffix="${input_file#*chrom_}"   # Remove everything up to and including "chrom_"
+
+
+    # Construct the output file name
+    output_file="zmays_final_$suffix.txt"
+
+    # Perform the operation and append to the output file
+    awk 'NR==FNR{h=$0; next} FNR==1{print h} 1' combined_headers_teosinte.txt "$input_file" > "$output_file"
+done
+
+# create new directory and move final files into it
+mkdir final_output/
+
+# move the 'multiple' files
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_multiple.txt_sorted_descending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_multiple.txt_sorted_descending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+
+# move the 'unknown' files
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_unknown.txt_sorted_descending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_unknown.txt_sorted_descending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+
+# move the 'teosinte' files - descending
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_1.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_2.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_3.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_4.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_5.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_6.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_7.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_8.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_9.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_10.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+
+# move the 'teosinte' files - ascending
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_1.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_2.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_3.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_4.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_5.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_6.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_7.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_8.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_9.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/teosinte_final_10.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+
+# move the 'zmays' files - descending
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_1.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_2.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_3.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_4.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_5.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_6.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_7.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_8.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_9.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_10.txt_sorted_descending.txt_subbed.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+
+# move the 'zmays' files - ascending
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_1.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_2.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_3.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_4.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_5.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_6.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_7.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_8.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_9.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
+mv "C:/Users/amuee/Downloads/ISU PhD/Courses/zmays_final_10.txt_sorted_ascending.txt.txt" "C:/Users/amuee/Downloads/ISU PhD/Courses/final_output/"
